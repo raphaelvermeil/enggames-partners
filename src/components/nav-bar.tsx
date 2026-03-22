@@ -19,6 +19,7 @@ export default function NavBar() {
   const links = [
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/companies', label: 'Companies' },
+    { href: '/campaigns', label: 'Campaigns' },
   ]
 
   return (
@@ -26,7 +27,7 @@ export default function NavBar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <div className="flex items-center gap-8">
-            <span className="font-bold text-lg">EnGames Partners</span>
+            <span className="font-bold text-lg">EngGames Partners</span>
             <div className="flex gap-4">
               {links.map(link => (
                 <Link

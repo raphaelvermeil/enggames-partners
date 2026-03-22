@@ -36,7 +36,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>EnGames Partners</CardTitle>
+          <CardTitle>EngGames Partners</CardTitle>
           <CardDescription>Sign in to manage your sponsorship outreach</CardDescription>
         </CardHeader>
         <CardContent>

@@ -13,6 +13,7 @@ create table companies (
   contact_email text not null,
   contact_name text,
   status company_status not null default 'pending',
+  follow_up_at timestamptz,
   created_at timestamptz default now(),
   user_id uuid references auth.users not null
 );
@@ -47,7 +48,9 @@ create table email_logs (
   campaign_id uuid references campaigns on delete set null,
   generated_body text not null,
   status email_log_status not null default 'draft',
+  resend_id text,
   sent_at timestamptz,
+  opened_at timestamptz,
   created_at timestamptz default now()
 );
 

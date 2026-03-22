@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(req: NextRequest) {
-  const { companyId } = await req.json()
+  const { companyId, promptOverride, campaignId } = await req.json()
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -22,26 +22,23 @@ export async function POST(req: NextRequest) {
     company.notes ? `Notes: ${company.notes}` : null,
   ].filter(Boolean).join('\n')
 
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    messages: [
-      {
-        role: 'user',
-        content: `You are writing a sponsorship pitch email on behalf of EnGames, a university-level engineering competition. Write a personalised, professional sponsorship pitch email to the following company. The email should explain what EnGames is, why sponsoring it would benefit them, and include a clear call to action. Be concise (under 300 words) and genuine.
+  const userMessage = promptOverride ?? `You are writing a sponsorship pitch email on behalf of EngGames, a university-level engineering competition. Write a personalised, professional sponsorship pitch email to the following company. The email should explain what EngGames is, why sponsoring it would benefit them, and include a clear call to action. Be concise (under 300 words) and genuine.
 
 ${context}
 
-Write only the email body (no subject line). Start with a greeting.`,
-      },
-    ],
+Write only the email body (no subject line). Start with a greeting.`
+
+  const message = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1024,
+    messages: [{ role: 'user', content: userMessage }],
   })
 
   const body = message.content[0].type === 'text' ? message.content[0].text : ''
 
   const { data: log } = await supabase.from('email_logs').insert({
     company_id: companyId,
-    campaign_id: null,
+    campaign_id: campaignId ?? null,
     generated_body: body,
     status: 'draft',
   }).select().single()

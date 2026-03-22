@@ -10,6 +10,7 @@ export interface Company {
   contact_email: string
   contact_name: string | null
   status: CompanyStatus
+  follow_up_at: string | null
   created_at: string
   user_id: string
 }
@@ -28,6 +29,8 @@ export interface EmailLog {
   campaign_id: string | null
   generated_body: string
   status: EmailLogStatus
+  resend_id: string | null
   sent_at: string | null
+  opened_at: string | null
   created_at: string
 }

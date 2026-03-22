@@ -17,15 +17,15 @@ export async function POST(req: NextRequest) {
   const company = log.companies as { name: string; contact_email: string; contact_name: string | null }
 
   try {
-    await resend.emails.send({
-      from: 'EnGames Partners <partners@engames.co>',
+    const { data: sent } = await resend.emails.send({
+      from: 'EngGames Partners <onboarding@resend.dev>',
       to: company.contact_email,
-      subject: `Sponsorship Opportunity — EnGames Engineering Competition`,
+      subject: `Sponsorship Opportunity — EngGames Engineering Competition`,
       text: log.generated_body,
     })
 
     const now = new Date().toISOString()
-    await supabase.from('email_logs').update({ status: 'sent', sent_at: now }).eq('id', logId)
+    await supabase.from('email_logs').update({ status: 'sent', sent_at: now, resend_id: sent?.id ?? null }).eq('id', logId)
     await supabase.from('companies').update({ status: 'sent' }).eq('id', log.company_id)
 
     return NextResponse.json({ success: true })

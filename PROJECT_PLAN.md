@@ -1,8 +1,8 @@
-# EnGames Partners — Sponsorship Email Automation Platform
+# EngGames Partners — Sponsorship Email Automation Platform
 
 ## Project Overview
 
-A web platform for the EnGames engineering competition organising team to automate outreach to potential sponsors. The platform allows the team to manage a list of companies, generate personalised sponsorship pitch emails using AI, send them in bulk, and track the status of each outreach.
+A web platform for the EngGames engineering competition organising team to automate outreach to potential sponsors. The platform allows the team to manage a list of companies, generate personalised sponsorship pitch emails using AI, send them in bulk, and track the status of each outreach.
 
 ---
 
@@ -76,6 +76,7 @@ The goal of the MVP is to deliver end-to-end value: import companies, generate A
 #### 3. AI Email Generation
 - Select a company and click "Generate Email"
 - Claude API uses company name, website, industry, and notes as context
+- **User-editable prompt**: Before generating, the user can view and edit the prompt that will be sent to the AI (pre-filled with a sensible default)
 - Generates a personalised sponsorship pitch email
 - Result is saved as a `draft` in `email_logs`
 

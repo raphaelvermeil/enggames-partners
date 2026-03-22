@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Company, CompanyStatus } from '@/types'
@@ -18,6 +19,8 @@ export default async function DashboardPage() {
     .order('created_at', { ascending: false })
 
   const all = (companies ?? []) as Company[]
+  const now = new Date()
+  const dueForFollowUp = all.filter(c => c.follow_up_at && new Date(c.follow_up_at) <= now && c.status !== 'replied' && c.status !== 'rejected')
   const counts = {
     total: all.length,
     pending: all.filter(c => c.status === 'pending').length,
@@ -46,6 +49,42 @@ export default async function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      {dueForFollowUp.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-4">Due for Follow-up</h2>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-amber-100 border-b border-amber-200">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-amber-900">Company</th>
+                  <th className="text-left px-4 py-3 font-medium text-amber-900">Contact</th>
+                  <th className="text-left px-4 py-3 font-medium text-amber-900">Follow-up Date</th>
+                  <th className="text-left px-4 py-3 font-medium text-amber-900">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-amber-100">
+                {dueForFollowUp.map(company => (
+                  <tr key={company.id}>
+                    <td className="px-4 py-3 font-medium">
+                      <Link href={`/companies/${company.id}`} className="hover:underline text-amber-900">
+                        {company.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-amber-800">{company.contact_email}</td>
+                    <td className="px-4 py-3 text-amber-800">{new Date(company.follow_up_at!).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[company.status]}`}>
+                        {company.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div>
         <h2 className="text-lg font-semibold mb-4">Recent Companies</h2>
