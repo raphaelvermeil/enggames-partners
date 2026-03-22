@@ -13,10 +13,11 @@ const STATUS_COLORS: Record<CompanyStatus, string> = {
 
 export default async function DashboardPage() {
   const supabase = await createClient()
-  const { data: companies } = await supabase
-    .from('companies')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const [{ data: companies }, { data: openedLogs }] = await Promise.all([
+    supabase.from('companies').select('*').order('created_at', { ascending: false }),
+    supabase.from('email_logs').select('company_id').not('opened_at', 'is', null),
+  ])
+  const openedCompanyIds = new Set((openedLogs ?? []).map(l => l.company_id))
 
   const all = (companies ?? []) as Company[]
   const now = new Date()
@@ -61,6 +62,7 @@ export default async function DashboardPage() {
                   <th className="text-left px-4 py-3 font-medium text-amber-900">Contact</th>
                   <th className="text-left px-4 py-3 font-medium text-amber-900">Follow-up Date</th>
                   <th className="text-left px-4 py-3 font-medium text-amber-900">Status</th>
+                  <th className="text-left px-4 py-3 font-medium text-amber-900">Opened</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-amber-100">
@@ -77,6 +79,13 @@ export default async function DashboardPage() {
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[company.status]}`}>
                         {company.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {openedCompanyIds.has(company.id) && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                          Opened
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -96,6 +105,7 @@ export default async function DashboardPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-700">Contact</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-700">Industry</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-700">Status</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-700">Opened</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -115,6 +125,13 @@ export default async function DashboardPage() {
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[company.status]}`}>
                         {company.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {openedCompanyIds.has(company.id) && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                          Opened
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))

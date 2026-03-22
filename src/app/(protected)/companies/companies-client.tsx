@@ -33,9 +33,10 @@ interface BulkProgress {
 interface Props {
   initialCompanies: Company[]
   campaigns: Campaign[]
+  openedCompanyIds: Set<string>
 }
 
-export default function CompaniesClient({ initialCompanies, campaigns }: Props) {
+export default function CompaniesClient({ initialCompanies, campaigns, openedCompanyIds }: Props) {
   const [companies, setCompanies] = useState(initialCompanies)
   const [statusFilter, setStatusFilter] = useState<CompanyStatus | 'all'>('all')
   const [addOpen, setAddOpen] = useState(false)
@@ -354,6 +355,7 @@ export default function CompaniesClient({ initialCompanies, campaigns }: Props) 
               <th className="text-left px-4 py-3 font-medium text-gray-700">Contact</th>
               <th className="text-left px-4 py-3 font-medium text-gray-700">Industry</th>
               <th className="text-left px-4 py-3 font-medium text-gray-700">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">Opened</th>
               <th className="text-left px-4 py-3 font-medium text-gray-700">Actions</th>
             </tr>
           </thead>
@@ -386,6 +388,13 @@ export default function CompaniesClient({ initialCompanies, campaigns }: Props) 
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[company.status]}`}>
                       {company.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {openedCompanyIds.has(company.id) && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                        Opened
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
