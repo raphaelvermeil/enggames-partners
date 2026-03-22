@@ -17,11 +17,17 @@ export async function POST(req: NextRequest) {
   const company = log.companies as { name: string; contact_email: string; contact_name: string | null }
 
   try {
+    const htmlBody = log.generated_body
+      .split('\n')
+      .map((line: string) => line.trim() === '' ? '<br/>' : `<p style="margin:0 0 12px 0">${line}</p>`)
+      .join('')
+
     const { data: sent } = await resend.emails.send({
       from: 'EngGames Partners <onboarding@resend.dev>',
       to: company.contact_email,
       subject: `Sponsorship Opportunity — EngGames Engineering Competition`,
       text: log.generated_body,
+      html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#111">${htmlBody}</div>`,
     })
 
     const now = new Date().toISOString()
