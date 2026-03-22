@@ -285,6 +285,13 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
                         Sent {new Date(log.sent_at).toLocaleDateString()}
                       </span>
                     )}
+                    {log.opened_at ? (
+                      <span className="text-xs text-green-600 font-medium">
+                        Opened {new Date(log.opened_at).toLocaleDateString()}
+                      </span>
+                    ) : log.status === 'sent' ? (
+                      <span className="text-xs text-gray-400">Not opened yet</span>
+                    ) : null}
                   </div>
                 </div>
               </CardHeader>
