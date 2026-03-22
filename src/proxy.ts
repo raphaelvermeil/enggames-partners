@@ -26,7 +26,8 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const isAuthPage = request.nextUrl.pathname.startsWith('/login')
-  const isProtected = !isAuthPage && request.nextUrl.pathname !== '/'
+  const isApi = request.nextUrl.pathname.startsWith('/api/')
+  const isProtected = !isAuthPage && !isApi && request.nextUrl.pathname !== '/'
 
   if (!user && isProtected) {
     const url = request.nextUrl.clone()
