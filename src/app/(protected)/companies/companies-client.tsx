@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { createClient } from '@/lib/supabase/client'
+import { fillTemplate } from '@/lib/template'
 import type { Campaign, Company, CompanyStatus } from '@/types'
 
 const STATUS_COLORS: Record<CompanyStatus, string> = {
@@ -17,9 +18,11 @@ const STATUS_COLORS: Record<CompanyStatus, string> = {
   sent: 'bg-green-100 text-green-800',
   replied: 'bg-purple-100 text-purple-800',
   rejected: 'bg-red-100 text-red-800',
+  bounced: 'bg-orange-100 text-orange-800',
+  complained: 'bg-amber-100 text-amber-800',
 }
 
-const ALL_STATUSES: CompanyStatus[] = ['pending', 'drafted', 'sent', 'replied', 'rejected']
+const ALL_STATUSES: CompanyStatus[] = ['pending', 'drafted', 'sent', 'replied', 'rejected', 'bounced', 'complained']
 
 type BulkItemStatus = 'queued' | 'generating' | 'sending' | 'done' | 'failed'
 
@@ -146,18 +149,34 @@ export default function CompaniesClient({ initialCompanies, campaigns, openedCom
       setBulkProgress(prev => prev!.map(p => p.companyId === company.id ? { ...p, status: 'generating' } : p))
       let logId: string | null = null
       try {
-        const genRes = await fetch('/api/generate-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            companyId: company.id,
-            campaignId: campaign?.id ?? null,
-            promptOverride: campaign?.prompt_template ?? null,
-          }),
-        })
-        const genData = await genRes.json()
-        if (!genData.log) throw new Error(genData.error ?? 'Generation failed')
-        logId = genData.log.id
+        if (campaign?.type === 'template') {
+          // Fill-in template: substitute [variables], no AI call.
+          const subject = campaign.subject_template ? fillTemplate(campaign.subject_template, company) : null
+          const body = fillTemplate(campaign.prompt_template, company)
+          const { data, error } = await supabase.from('email_logs').insert({
+            company_id: company.id,
+            campaign_id: campaign.id,
+            generated_body: body,
+            subject,
+            status: 'draft',
+          }).select('id').single()
+          if (error || !data) throw new Error(error?.message ?? 'Draft creation failed')
+          await supabase.from('companies').update({ status: 'drafted' }).eq('id', company.id)
+          logId = data.id
+        } else {
+          const genRes = await fetch('/api/generate-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              companyId: company.id,
+              campaignId: campaign?.id ?? null,
+              promptOverride: campaign?.prompt_template ?? null,
+            }),
+          })
+          const genData = await genRes.json()
+          if (!genData.log) throw new Error(genData.error ?? 'Generation failed')
+          logId = genData.log.id
+        }
         setCompanies(prev => prev.map(c => c.id === company.id ? { ...c, status: 'drafted' } : c))
       } catch (err) {
         setBulkProgress(prev => prev!.map(p => p.companyId === company.id ? { ...p, status: 'failed', error: String(err) } : p))

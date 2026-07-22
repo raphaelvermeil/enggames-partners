@@ -9,6 +9,8 @@ const STATUS_COLORS: Record<CompanyStatus, string> = {
   sent: 'bg-green-100 text-green-800',
   replied: 'bg-purple-100 text-purple-800',
   rejected: 'bg-red-100 text-red-800',
+  bounced: 'bg-orange-100 text-orange-800',
+  complained: 'bg-amber-100 text-amber-800',
 }
 
 export default async function DashboardPage() {
@@ -21,7 +23,7 @@ export default async function DashboardPage() {
 
   const all = (companies ?? []) as Company[]
   const now = new Date()
-  const dueForFollowUp = all.filter(c => c.follow_up_at && new Date(c.follow_up_at) <= now && c.status !== 'replied' && c.status !== 'rejected')
+  const dueForFollowUp = all.filter(c => c.follow_up_at && new Date(c.follow_up_at) <= now && c.status !== 'replied' && c.status !== 'rejected' && c.status !== 'bounced' && c.status !== 'complained')
   const counts = {
     total: all.length,
     pending: all.filter(c => c.status === 'pending').length,

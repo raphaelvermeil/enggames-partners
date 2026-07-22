@@ -12,6 +12,26 @@ type ResendEvent = {
   data?: { email_id?: string }
 }
 
+// Mark the email log with the given status, and reflect it on the company —
+// but only if the company is still 'sent', so we never clobber a manual
+// 'replied'/'rejected' that a user set afterwards.
+async function markLogAndCompany(resendId: string, status: 'bounced' | 'complained') {
+  const { data: rows } = await supabase
+    .from('email_logs')
+    .update({ status })
+    .eq('resend_id', resendId)
+    .select('company_id')
+
+  const companyId = rows?.[0]?.company_id
+  if (companyId) {
+    await supabase
+      .from('companies')
+      .update({ status })
+      .eq('id', companyId)
+      .eq('status', 'sent')
+  }
+}
+
 export async function POST(req: NextRequest) {
   // Read the raw body — Svix signs the exact bytes, so we must not re-serialize.
   const rawBody = await req.text()
@@ -54,17 +74,11 @@ export async function POST(req: NextRequest) {
       break
 
     case 'email.bounced':
-      await supabase
-        .from('email_logs')
-        .update({ status: 'bounced' })
-        .eq('resend_id', resendId)
+      await markLogAndCompany(resendId, 'bounced')
       break
 
     case 'email.complained':
-      await supabase
-        .from('email_logs')
-        .update({ status: 'complained' })
-        .eq('resend_id', resendId)
+      await markLogAndCompany(resendId, 'complained')
       break
   }
 

@@ -39,6 +39,8 @@ const STATUS_COLORS: Record<CompanyStatus, string> = {
   sent: 'bg-green-100 text-green-800',
   replied: 'bg-purple-100 text-purple-800',
   rejected: 'bg-red-100 text-red-800',
+  bounced: 'bg-orange-100 text-orange-800',
+  complained: 'bg-amber-100 text-amber-800',
 }
 
 const LOG_STATUS_LABELS: Record<EmailLogStatus, string> = {
@@ -52,9 +54,10 @@ const LOG_STATUS_LABELS: Record<EmailLogStatus, string> = {
 interface Props {
   company: Company
   initialLogs: EmailLog[]
+  initialCampaigns: Campaign[]
 }
 
-export default function CompanyDetail({ company, initialLogs }: Props) {
+export default function CompanyDetail({ company, initialLogs, initialCampaigns }: Props) {
   const [logs, setLogs] = useState(initialLogs)
   const [currentCompany, setCurrentCompany] = useState(company)
   const [generating, setGenerating] = useState(false)
@@ -63,7 +66,7 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
   const [editContent, setEditContent] = useState('')
   const [showPromptDialog, setShowPromptDialog] = useState(false)
   const [promptText, setPromptText] = useState('')
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
   const [editingCompany, setEditingCompany] = useState(false)
   const [companyForm, setCompanyForm] = useState({
@@ -148,6 +151,11 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
   async function handleMarkReplied() {
     await supabase.from('companies').update({ status: 'replied' }).eq('id', company.id)
     setCurrentCompany(prev => ({ ...prev, status: 'replied' }))
+  }
+
+  async function handleSetStatus(status: CompanyStatus) {
+    await supabase.from('companies').update({ status }).eq('id', company.id)
+    setCurrentCompany(prev => ({ ...prev, status }))
   }
 
   async function handleScheduleFollowUp(date: string) {
@@ -251,6 +259,19 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
             {currentCompany.status === 'sent' && (
               <Button variant="outline" className="w-full" onClick={handleMarkReplied}>
                 Mark as Replied
+              </Button>
+            )}
+            {currentCompany.status !== 'rejected' ? (
+              <Button
+                variant="outline"
+                className="w-full text-red-600 hover:text-red-700"
+                onClick={() => handleSetStatus('rejected')}
+              >
+                Mark as Rejected
+              </Button>
+            ) : (
+              <Button variant="outline" className="w-full" onClick={() => handleSetStatus('pending')}>
+                Reopen (set to Pending)
               </Button>
             )}
             {(currentCompany.status === 'sent' || currentCompany.status === 'drafted') && (

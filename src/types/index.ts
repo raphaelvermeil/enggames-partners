@@ -1,4 +1,4 @@
-export type CompanyStatus = 'pending' | 'drafted' | 'sent' | 'replied' | 'rejected'
+export type CompanyStatus = 'pending' | 'drafted' | 'sent' | 'replied' | 'rejected' | 'bounced' | 'complained'
 export type CampaignType = 'prompt' | 'template'
 export type EmailLogStatus = 'draft' | 'sent' | 'failed' | 'bounced' | 'complained'
 

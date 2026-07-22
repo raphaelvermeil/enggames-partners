@@ -2,7 +2,7 @@
 create extension if not exists "uuid-ossp";
 
 -- Companies table
-create type company_status as enum ('pending', 'drafted', 'sent', 'replied', 'rejected');
+create type company_status as enum ('pending', 'drafted', 'sent', 'replied', 'rejected', 'bounced', 'complained');
 
 create table companies (
   id uuid default uuid_generate_v4() primary key,
