@@ -1,5 +1,5 @@
 export type CompanyStatus = 'pending' | 'drafted' | 'sent' | 'replied' | 'rejected'
-export type EmailLogStatus = 'draft' | 'sent' | 'failed'
+export type EmailLogStatus = 'draft' | 'sent' | 'failed' | 'bounced' | 'complained'
 
 export interface Company {
   id: string
@@ -31,6 +31,7 @@ export interface EmailLog {
   status: EmailLogStatus
   resend_id: string | null
   sent_at: string | null
+  delivered_at: string | null
   opened_at: string | null
   created_at: string
 }

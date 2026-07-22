@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       .join('')
 
     const { data: sent } = await resend.emails.send({
-      from: 'EngGames Partners <onboarding@resend.dev>',
+      from: process.env.EMAIL_FROM!,
       to: company.contact_email,
       subject: `Sponsorship Opportunity — EngGames Engineering Competition`,
       text: log.generated_body,

@@ -40,7 +40,7 @@ create policy "Users can manage their own campaigns"
   with check (auth.uid() = user_id);
 
 -- Email logs table
-create type email_log_status as enum ('draft', 'sent', 'failed');
+create type email_log_status as enum ('draft', 'sent', 'failed', 'bounced', 'complained');
 
 create table email_logs (
   id uuid default uuid_generate_v4() primary key,
@@ -50,6 +50,7 @@ create table email_logs (
   status email_log_status not null default 'draft',
   resend_id text,
   sent_at timestamptz,
+  delivered_at timestamptz,
   opened_at timestamptz,
   created_at timestamptz default now()
 );

@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { createClient } from '@/lib/supabase/client'
-import type { Campaign, Company, EmailLog, CompanyStatus } from '@/types'
+import type { Campaign, Company, EmailLog, CompanyStatus, EmailLogStatus } from '@/types'
 
 const TONES = {
   Professional: (context: string) =>
@@ -36,6 +36,14 @@ const STATUS_COLORS: Record<CompanyStatus, string> = {
   sent: 'bg-green-100 text-green-800',
   replied: 'bg-purple-100 text-purple-800',
   rejected: 'bg-red-100 text-red-800',
+}
+
+const LOG_STATUS_LABELS: Record<EmailLogStatus, string> = {
+  draft: 'Draft',
+  sent: 'Sent',
+  failed: 'Failed',
+  bounced: 'Bounced',
+  complained: 'Marked as spam',
 }
 
 interface Props {
@@ -260,7 +268,7 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">
-                    {log.status === 'draft' ? 'Draft' : log.status === 'sent' ? 'Sent' : 'Failed'}
+                    {LOG_STATUS_LABELS[log.status]}
                   </CardTitle>
                   <div className="flex gap-2 items-center">
                     {log.status === 'draft' && (
@@ -285,7 +293,16 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
                         Sent {new Date(log.sent_at).toLocaleDateString()}
                       </span>
                     )}
-                    {log.opened_at ? (
+                    {log.delivered_at && (
+                      <span className="text-xs text-gray-500">
+                        Delivered {new Date(log.delivered_at).toLocaleDateString()}
+                      </span>
+                    )}
+                    {log.status === 'bounced' ? (
+                      <span className="text-xs text-red-600 font-medium">Bounced</span>
+                    ) : log.status === 'complained' ? (
+                      <span className="text-xs text-amber-600 font-medium">Marked as spam</span>
+                    ) : log.opened_at ? (
                       <span className="text-xs text-green-600 font-medium">
                         Opened {new Date(log.opened_at).toLocaleDateString()}
                       </span>
