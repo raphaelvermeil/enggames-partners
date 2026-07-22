@@ -233,6 +233,14 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
                     </button>
                   ))}
                 </div>
+                {(() => {
+                  const campaign = campaigns.find(c => c.id === selectedCampaignId)
+                  return campaign?.attachment_name ? (
+                    <p className="text-xs text-gray-500">
+                      📎 {campaign.attachment_name} will be attached to this email
+                    </p>
+                  ) : null
+                })()}
               </div>
             )}
             <div className="flex gap-2 flex-wrap">
@@ -311,6 +319,16 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
                     ) : null}
                   </div>
                 </div>
+                {(() => {
+                  const campaign = campaigns.find(c => c.id === log.campaign_id)
+                  return campaign?.attachment_name ? (
+                    <p className="text-xs text-gray-500 mt-1">
+                      📎 <a href={campaign.attachment_url!} target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">
+                        {campaign.attachment_name}
+                      </a>
+                    </p>
+                  ) : null
+                })()}
               </CardHeader>
               <CardContent>
                 {editingLog === log.id ? (

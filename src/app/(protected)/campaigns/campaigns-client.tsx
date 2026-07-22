@@ -21,7 +21,80 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
   const [file, setFile] = useState<File | null>(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Campaign | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', prompt_template: '' })
+  const [editFile, setEditFile] = useState<File | null>(null)
+  const [removeAttachment, setRemoveAttachment] = useState(false)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
   const supabase = createClient()
+
+  // Derive the storage object path from a public attachment URL so we can delete it.
+  function storagePathFromUrl(url: string): string | null {
+    const marker = '/campaign-attachments/'
+    const idx = url.indexOf(marker)
+    return idx === -1 ? null : url.slice(idx + marker.length)
+  }
+
+  function openEdit(campaign: Campaign) {
+    setEditing(campaign)
+    setEditForm({ name: campaign.name, prompt_template: campaign.prompt_template })
+    setEditFile(null)
+    setRemoveAttachment(false)
+    setEditError(null)
+  }
+
+  async function handleEditSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editing) return
+    setEditSaving(true)
+    setEditError(null)
+    const { data: { user } } = await supabase.auth.getUser()
+
+    let attachment_url = editing.attachment_url
+    let attachment_name = editing.attachment_name
+
+    async function deleteOld() {
+      if (editing!.attachment_url) {
+        const oldPath = storagePathFromUrl(editing!.attachment_url)
+        if (oldPath) await supabase.storage.from('campaign-attachments').remove([oldPath])
+      }
+    }
+
+    if (editFile) {
+      const path = `${user!.id}/${crypto.randomUUID()}.pdf`
+      const { error: uploadError } = await supabase.storage
+        .from('campaign-attachments')
+        .upload(path, editFile, { contentType: 'application/pdf' })
+      if (uploadError) {
+        setEditError(`Attachment upload failed: ${uploadError.message}`)
+        setEditSaving(false)
+        return
+      }
+      await deleteOld()
+      attachment_url = supabase.storage.from('campaign-attachments').getPublicUrl(path).data.publicUrl
+      attachment_name = editFile.name
+    } else if (removeAttachment) {
+      await deleteOld()
+      attachment_url = null
+      attachment_name = null
+    }
+
+    const { data, error: updateError } = await supabase.from('campaigns').update({
+      name: editForm.name,
+      prompt_template: editForm.prompt_template,
+      attachment_url,
+      attachment_name,
+    }).eq('id', editing.id).select().single()
+
+    if (!updateError && data) {
+      setCampaigns(prev => prev.map(c => c.id === editing.id ? (data as Campaign) : c))
+      setEditing(null)
+    } else if (updateError) {
+      setEditError(updateError.message)
+    }
+    setEditSaving(false)
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -137,14 +210,19 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">{campaign.name}</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-red-600 hover:text-red-700"
-                    onClick={() => handleDelete(campaign.id)}
-                  >
-                    Delete
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => openEdit(campaign)}>
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => handleDelete(campaign.id)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </div>
                 <p className="text-xs text-gray-400">
                   Created {new Date(campaign.created_at).toLocaleDateString()}
@@ -166,6 +244,72 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
           ))}
         </div>
       )}
+
+      <Dialog open={editing !== null} onOpenChange={o => { if (!o) setEditing(null) }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Campaign</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditSave} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Campaign Name *</Label>
+              <Input
+                value={editForm.name}
+                onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Prompt Template *</Label>
+              <Textarea
+                value={editForm.prompt_template}
+                onChange={e => setEditForm(p => ({ ...p, prompt_template: e.target.value }))}
+                className="min-h-[200px] max-h-[50vh] overflow-y-auto font-mono text-sm"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>PDF Attachment</Label>
+              {editing?.attachment_name && !editFile && !removeAttachment && (
+                <p className="text-xs text-gray-500">
+                  📎 Current: {editing.attachment_name}
+                  <button
+                    type="button"
+                    onClick={() => setRemoveAttachment(true)}
+                    className="ml-2 text-red-600 underline hover:text-red-700"
+                  >
+                    Remove
+                  </button>
+                </p>
+              )}
+              {removeAttachment && !editFile && (
+                <p className="text-xs text-gray-500">
+                  Attachment will be removed.
+                  <button
+                    type="button"
+                    onClick={() => setRemoveAttachment(false)}
+                    className="ml-2 underline hover:text-gray-700"
+                  >
+                    Undo
+                  </button>
+                </p>
+              )}
+              <p className="text-xs text-gray-500">
+                {editing?.attachment_name ? 'Upload a new PDF to replace the current one.' : 'Optional. Attached to every email generated from this campaign.'}
+              </p>
+              <Input
+                type="file"
+                accept="application/pdf"
+                onChange={e => setEditFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            {editError && <p className="text-sm text-red-500">{editError}</p>}
+            <Button type="submit" className="w-full" disabled={editSaving}>
+              {editSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
