@@ -206,7 +206,7 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
       </div>
 
       <Dialog open={showPromptDialog} onOpenChange={setShowPromptDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Prompt</DialogTitle>
           </DialogHeader>
@@ -250,7 +250,7 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
             <Textarea
               value={promptText}
               onChange={e => setPromptText(e.target.value)}
-              className="min-h-[300px] font-mono text-sm"
+              className="min-h-[300px] max-h-[50vh] overflow-y-auto font-mono text-sm"
             />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowPromptDialog(false)}>Cancel</Button>
