@@ -54,7 +54,7 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
           <DialogTrigger render={<Button />}>
             New Campaign
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>New Campaign</DialogTitle>
             </DialogHeader>
@@ -77,7 +77,7 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
                   value={form.prompt_template}
                   onChange={e => setForm(p => ({ ...p, prompt_template: e.target.value }))}
                   placeholder="You are writing a sponsorship pitch email on behalf of EngGames..."
-                  className="min-h-[200px] font-mono text-sm"
+                  className="min-h-[200px] max-h-[50vh] overflow-y-auto font-mono text-sm"
                   required
                 />
               </div>
