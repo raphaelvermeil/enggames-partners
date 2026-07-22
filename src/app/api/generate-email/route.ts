@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
+import { fillTemplate } from '@/lib/template'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -36,10 +37,18 @@ Write only the email body (no subject line). Start with a greeting.`
 
   const body = message.content[0].type === 'text' ? message.content[0].text : ''
 
+  // If the chosen campaign defines a subject line, resolve its [variables] for this company.
+  let subject: string | null = null
+  if (campaignId) {
+    const { data: campaign } = await supabase.from('campaigns').select('subject_template').eq('id', campaignId).single()
+    if (campaign?.subject_template) subject = fillTemplate(campaign.subject_template, company)
+  }
+
   const { data: log } = await supabase.from('email_logs').insert({
     company_id: companyId,
     campaign_id: campaignId ?? null,
     generated_body: body,
+    subject,
     status: 'draft',
   }).select().single()
 

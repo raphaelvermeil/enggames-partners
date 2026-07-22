@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const { data: sent } = await resend.emails.send({
       from: process.env.EMAIL_FROM!,
       to: company.contact_email,
-      subject: `Sponsorship Opportunity — EngGames Engineering Competition`,
+      subject: log.subject ?? `Sponsorship Opportunity — EngGames Engineering Competition`,
       text: log.generated_body,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#111">${htmlBody}</div>`,
       attachments,

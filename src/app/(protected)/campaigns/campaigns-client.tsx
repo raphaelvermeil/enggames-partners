@@ -8,21 +8,109 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
-import type { Campaign } from '@/types'
+import { TEMPLATE_VARIABLES } from '@/lib/template'
+import type { Campaign, CampaignType } from '@/types'
 
 interface Props {
   initialCampaigns: Campaign[]
 }
 
+type CampaignFormValues = {
+  name: string
+  type: CampaignType
+  subject_template: string
+  prompt_template: string
+}
+
+const EMPTY_FORM: CampaignFormValues = { name: '', type: 'prompt', subject_template: '', prompt_template: '' }
+
+const VARS_HINT = TEMPLATE_VARIABLES.join('  ')
+
+// Shared fields for both the New and Edit campaign dialogs.
+function CampaignFields({ values, onChange }: {
+  values: CampaignFormValues
+  onChange: (patch: Partial<CampaignFormValues>) => void
+}) {
+  const isTemplate = values.type === 'template'
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Campaign Name *</Label>
+        <Input
+          value={values.name}
+          onChange={e => onChange({ name: e.target.value })}
+          placeholder="e.g. Winter 2026 Tech Outreach"
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Type</Label>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => onChange({ type: 'prompt' })}
+            className={`text-sm px-3 py-1.5 rounded-md border transition-colors ${values.type === 'prompt' ? 'bg-black text-white border-black' : 'border-gray-300 hover:border-gray-400'}`}
+          >
+            AI Prompt
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ type: 'template' })}
+            className={`text-sm px-3 py-1.5 rounded-md border transition-colors ${values.type === 'template' ? 'bg-black text-white border-black' : 'border-gray-300 hover:border-gray-400'}`}
+          >
+            Fill-in Template
+          </button>
+        </div>
+        <p className="text-xs text-gray-500">
+          {isTemplate
+            ? 'A ready-to-send email with [variables] filled from each company. No AI is used.'
+            : 'A prompt for Claude to write a personalised email. Company context is appended automatically.'}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Subject Line</Label>
+        <p className="text-xs text-gray-500">
+          Optional. Supports variables: {VARS_HINT}. Leave blank to use the default subject.
+        </p>
+        <Input
+          value={values.subject_template}
+          onChange={e => onChange({ subject_template: e.target.value })}
+          placeholder="e.g. Sponsoring EngGames — [company]?"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>{isTemplate ? 'Email Body *' : 'Prompt Template *'}</Label>
+        <p className="text-xs text-gray-500">
+          {isTemplate
+            ? <>Write the email exactly as it should be sent. Use variables: {VARS_HINT} — filled from each company&apos;s details.</>
+            : 'Write the full prompt for Claude. Company context (name, industry, website, notes) will be appended automatically.'}
+        </p>
+        <Textarea
+          value={values.prompt_template}
+          onChange={e => onChange({ prompt_template: e.target.value })}
+          placeholder={isTemplate
+            ? 'Hi [contact],\n\nI’m reaching out on behalf of EngGames to see if [company] would be interested in sponsoring...'
+            : 'You are writing a sponsorship pitch email on behalf of EngGames...'}
+          className="min-h-[200px] max-h-[50vh] overflow-y-auto font-mono text-sm"
+          required
+        />
+      </div>
+    </>
+  )
+}
+
 export default function CampaignsClient({ initialCampaigns }: Props) {
   const [campaigns, setCampaigns] = useState(initialCampaigns)
   const [addOpen, setAddOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', prompt_template: '' })
+  const [form, setForm] = useState<CampaignFormValues>(EMPTY_FORM)
   const [file, setFile] = useState<File | null>(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Campaign | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', prompt_template: '' })
+  const [editForm, setEditForm] = useState<CampaignFormValues>(EMPTY_FORM)
   const [editFile, setEditFile] = useState<File | null>(null)
   const [removeAttachment, setRemoveAttachment] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
@@ -36,12 +124,68 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
     return idx === -1 ? null : url.slice(idx + marker.length)
   }
 
+  async function uploadPdf(pdf: File): Promise<{ url: string; name: string }> {
+    const { data: { user } } = await supabase.auth.getUser()
+    const path = `${user!.id}/${crypto.randomUUID()}.pdf`
+    const { error: uploadError } = await supabase.storage
+      .from('campaign-attachments')
+      .upload(path, pdf, { contentType: 'application/pdf' })
+    if (uploadError) throw new Error(uploadError.message)
+    const url = supabase.storage.from('campaign-attachments').getPublicUrl(path).data.publicUrl
+    return { url, name: pdf.name }
+  }
+
   function openEdit(campaign: Campaign) {
     setEditing(campaign)
-    setEditForm({ name: campaign.name, prompt_template: campaign.prompt_template })
+    setEditForm({
+      name: campaign.name,
+      type: campaign.type,
+      subject_template: campaign.subject_template ?? '',
+      prompt_template: campaign.prompt_template,
+    })
     setEditFile(null)
     setRemoveAttachment(false)
     setEditError(null)
+  }
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    setAdding(true)
+    setError(null)
+    const { data: { user } } = await supabase.auth.getUser()
+
+    let attachment_url: string | null = null
+    let attachment_name: string | null = null
+    if (file) {
+      try {
+        const uploaded = await uploadPdf(file)
+        attachment_url = uploaded.url
+        attachment_name = uploaded.name
+      } catch (err) {
+        setError(`Attachment upload failed: ${(err as Error).message}`)
+        setAdding(false)
+        return
+      }
+    }
+
+    const { data, error: insertError } = await supabase.from('campaigns').insert({
+      name: form.name,
+      type: form.type,
+      subject_template: form.subject_template.trim() || null,
+      prompt_template: form.prompt_template,
+      attachment_url,
+      attachment_name,
+      user_id: user!.id,
+    }).select().single()
+    if (!insertError && data) {
+      setCampaigns(prev => [data as Campaign, ...prev])
+      setForm(EMPTY_FORM)
+      setFile(null)
+      setAddOpen(false)
+    } else if (insertError) {
+      setError(insertError.message)
+    }
+    setAdding(false)
   }
 
   async function handleEditSave(e: React.FormEvent) {
@@ -49,7 +193,6 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
     if (!editing) return
     setEditSaving(true)
     setEditError(null)
-    const { data: { user } } = await supabase.auth.getUser()
 
     let attachment_url = editing.attachment_url
     let attachment_name = editing.attachment_name
@@ -62,18 +205,16 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
     }
 
     if (editFile) {
-      const path = `${user!.id}/${crypto.randomUUID()}.pdf`
-      const { error: uploadError } = await supabase.storage
-        .from('campaign-attachments')
-        .upload(path, editFile, { contentType: 'application/pdf' })
-      if (uploadError) {
-        setEditError(`Attachment upload failed: ${uploadError.message}`)
+      try {
+        const uploaded = await uploadPdf(editFile)
+        await deleteOld()
+        attachment_url = uploaded.url
+        attachment_name = uploaded.name
+      } catch (err) {
+        setEditError(`Attachment upload failed: ${(err as Error).message}`)
         setEditSaving(false)
         return
       }
-      await deleteOld()
-      attachment_url = supabase.storage.from('campaign-attachments').getPublicUrl(path).data.publicUrl
-      attachment_name = editFile.name
     } else if (removeAttachment) {
       await deleteOld()
       attachment_url = null
@@ -82,6 +223,8 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
 
     const { data, error: updateError } = await supabase.from('campaigns').update({
       name: editForm.name,
+      type: editForm.type,
+      subject_template: editForm.subject_template.trim() || null,
       prompt_template: editForm.prompt_template,
       attachment_url,
       attachment_name,
@@ -96,46 +239,6 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
     setEditSaving(false)
   }
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault()
-    setAdding(true)
-    setError(null)
-    const { data: { user } } = await supabase.auth.getUser()
-
-    let attachment_url: string | null = null
-    let attachment_name: string | null = null
-    if (file) {
-      const path = `${user!.id}/${crypto.randomUUID()}.pdf`
-      const { error: uploadError } = await supabase.storage
-        .from('campaign-attachments')
-        .upload(path, file, { contentType: 'application/pdf' })
-      if (uploadError) {
-        setError(`Attachment upload failed: ${uploadError.message}`)
-        setAdding(false)
-        return
-      }
-      attachment_url = supabase.storage.from('campaign-attachments').getPublicUrl(path).data.publicUrl
-      attachment_name = file.name
-    }
-
-    const { data, error: insertError } = await supabase.from('campaigns').insert({
-      name: form.name,
-      prompt_template: form.prompt_template,
-      attachment_url,
-      attachment_name,
-      user_id: user!.id,
-    }).select().single()
-    if (!insertError && data) {
-      setCampaigns(prev => [data as Campaign, ...prev])
-      setForm({ name: '', prompt_template: '' })
-      setFile(null)
-      setAddOpen(false)
-    } else if (insertError) {
-      setError(insertError.message)
-    }
-    setAdding(false)
-  }
-
   async function handleDelete(id: string) {
     await supabase.from('campaigns').delete().eq('id', id)
     setCampaigns(prev => prev.filter(c => c.id !== id))
@@ -146,7 +249,7 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Campaigns</h1>
-          <p className="text-gray-500 mt-1">Reusable prompt templates for email generation</p>
+          <p className="text-gray-500 mt-1">Reusable AI prompts or fill-in email templates</p>
         </div>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger render={<Button />}>
@@ -157,28 +260,7 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
               <DialogTitle>New Campaign</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleAdd} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Campaign Name *</Label>
-                <Input
-                  value={form.name}
-                  onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Winter 2026 Tech Outreach"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Prompt Template *</Label>
-                <p className="text-xs text-gray-500">
-                  Write the full prompt for Claude. Company context (name, industry, website, notes) will be appended automatically.
-                </p>
-                <Textarea
-                  value={form.prompt_template}
-                  onChange={e => setForm(p => ({ ...p, prompt_template: e.target.value }))}
-                  placeholder="You are writing a sponsorship pitch email on behalf of EngGames..."
-                  className="min-h-[200px] max-h-[50vh] overflow-y-auto font-mono text-sm"
-                  required
-                />
-              </div>
+              <CampaignFields values={form} onChange={patch => setForm(p => ({ ...p, ...patch }))} />
               <div className="space-y-2">
                 <Label>PDF Attachment</Label>
                 <p className="text-xs text-gray-500">
@@ -201,7 +283,7 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
 
       {campaigns.length === 0 ? (
         <div className="bg-white rounded-lg border px-4 py-12 text-center text-gray-500">
-          No campaigns yet. Create one to use as a reusable prompt template.
+          No campaigns yet. Create one to use as a reusable prompt or email template.
         </div>
       ) : (
         <div className="space-y-4">
@@ -209,7 +291,12 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
             <Card key={campaign.id}>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">{campaign.name}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">{campaign.name}</CardTitle>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${campaign.type === 'template' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                      {campaign.type === 'template' ? 'Template' : 'AI Prompt'}
+                    </span>
+                  </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => openEdit(campaign)}>
                       Edit
@@ -227,6 +314,11 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
                 <p className="text-xs text-gray-400">
                   Created {new Date(campaign.created_at).toLocaleDateString()}
                 </p>
+                {campaign.subject_template && (
+                  <p className="text-xs text-gray-500">
+                    Subject: {campaign.subject_template}
+                  </p>
+                )}
                 {campaign.attachment_name && (
                   <p className="text-xs text-gray-500">
                     📎 <a href={campaign.attachment_url!} target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">
@@ -251,23 +343,7 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
             <DialogTitle>Edit Campaign</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditSave} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Campaign Name *</Label>
-              <Input
-                value={editForm.name}
-                onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Prompt Template *</Label>
-              <Textarea
-                value={editForm.prompt_template}
-                onChange={e => setEditForm(p => ({ ...p, prompt_template: e.target.value }))}
-                className="min-h-[200px] max-h-[50vh] overflow-y-auto font-mono text-sm"
-                required
-              />
-            </div>
+            <CampaignFields values={editForm} onChange={patch => setEditForm(p => ({ ...p, ...patch }))} />
             <div className="space-y-2">
               <Label>PDF Attachment</Label>
               {editing?.attachment_name && !editFile && !removeAttachment && (

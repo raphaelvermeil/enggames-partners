@@ -28,7 +28,10 @@ create policy "Users can manage their own companies"
 create table campaigns (
   id uuid default uuid_generate_v4() primary key,
   name text not null,
+  type text not null default 'prompt' check (type in ('prompt', 'template')),
+  -- For type='prompt' this holds the AI prompt; for type='template' the literal email body with [variables].
   prompt_template text not null,
+  subject_template text,
   attachment_url text,
   attachment_name text,
   created_at timestamptz default now(),
@@ -49,6 +52,7 @@ create table email_logs (
   company_id uuid references companies on delete cascade not null,
   campaign_id uuid references campaigns on delete set null,
   generated_body text not null,
+  subject text,
   status email_log_status not null default 'draft',
   resend_id text,
   sent_at timestamptz,

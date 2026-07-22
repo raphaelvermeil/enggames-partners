@@ -3,10 +3,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { createClient } from '@/lib/supabase/client'
+import { fillTemplate } from '@/lib/template'
 import type { Campaign, Company, EmailLog, CompanyStatus, EmailLogStatus } from '@/types'
 
 const TONES = {
@@ -62,10 +65,18 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
   const [promptText, setPromptText] = useState('')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
+  const [editingCompany, setEditingCompany] = useState(false)
+  const [companyForm, setCompanyForm] = useState({
+    name: '', contact_email: '', contact_name: '', website: '', industry: '', notes: '',
+  })
+  const [savingCompany, setSavingCompany] = useState(false)
+  const [companyError, setCompanyError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
   const latestDraft = logs.find(l => l.status === 'draft')
+  const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId)
+  const isTemplate = selectedCampaign?.type === 'template'
 
   async function openPromptDialog() {
     setPromptText(TONES.Professional(buildContext(currentCompany)))
@@ -75,9 +86,30 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
   }
 
   async function handleGenerate() {
+    const campaign = campaigns.find(c => c.id === selectedCampaignId)
     setShowPromptDialog(false)
     setGenerating(true)
     try {
+      if (campaign?.type === 'template') {
+        // Fill-in template: no AI. The textarea already holds the filled body (editable).
+        const subject = campaign.subject_template
+          ? fillTemplate(campaign.subject_template, currentCompany)
+          : null
+        const { data, error } = await supabase.from('email_logs').insert({
+          company_id: company.id,
+          campaign_id: campaign.id,
+          generated_body: promptText,
+          subject,
+          status: 'draft',
+        }).select().single()
+        if (!error && data) {
+          await supabase.from('companies').update({ status: 'drafted' }).eq('id', company.id)
+          setLogs(prev => [data as EmailLog, ...prev])
+          setCurrentCompany(prev => ({ ...prev, status: 'drafted' }))
+        }
+        return
+      }
+
       const res = await fetch('/api/generate-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,6 +166,41 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
     setEditingLog(null)
   }
 
+  function openEditCompany() {
+    setCompanyForm({
+      name: currentCompany.name,
+      contact_email: currentCompany.contact_email,
+      contact_name: currentCompany.contact_name ?? '',
+      website: currentCompany.website ?? '',
+      industry: currentCompany.industry ?? '',
+      notes: currentCompany.notes ?? '',
+    })
+    setCompanyError(null)
+    setEditingCompany(true)
+  }
+
+  async function handleSaveCompany(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingCompany(true)
+    setCompanyError(null)
+    const updates = {
+      name: companyForm.name,
+      contact_email: companyForm.contact_email,
+      contact_name: companyForm.contact_name.trim() || null,
+      website: companyForm.website.trim() || null,
+      industry: companyForm.industry.trim() || null,
+      notes: companyForm.notes.trim() || null,
+    }
+    const { data, error } = await supabase.from('companies').update(updates).eq('id', company.id).select().single()
+    if (!error && data) {
+      setCurrentCompany(data as Company)
+      setEditingCompany(false)
+    } else if (error) {
+      setCompanyError(error.message)
+    }
+    setSavingCompany(false)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -150,7 +217,12 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
-          <CardHeader><CardTitle className="text-base">Company Info</CardTitle></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Company Info</CardTitle>
+              <Button variant="outline" size="sm" onClick={openEditCompany}>Edit</Button>
+            </div>
+          </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div><span className="text-gray-500">Email:</span> {currentCompany.contact_email}</div>
             {currentCompany.contact_name && <div><span className="text-gray-500">Contact:</span> {currentCompany.contact_name}</div>}
@@ -208,7 +280,7 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
       <Dialog open={showPromptDialog} onOpenChange={setShowPromptDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Prompt</DialogTitle>
+            <DialogTitle>{isTemplate ? 'Preview Email' : 'Edit Prompt'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             {campaigns.length > 0 && (
@@ -226,35 +298,50 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
                     <button
                       key={c.id}
                       type="button"
-                      onClick={() => { setSelectedCampaignId(c.id); setPromptText(`${c.prompt_template}\n\n${buildContext(currentCompany)}\n\nWrite only the email body (no subject line). Start with a greeting.`) }}
+                      onClick={() => {
+                        setSelectedCampaignId(c.id)
+                        setPromptText(c.type === 'template'
+                          ? fillTemplate(c.prompt_template, currentCompany)
+                          : `${c.prompt_template}\n\n${buildContext(currentCompany)}\n\nWrite only the email body (no subject line). Start with a greeting.`)
+                      }}
                       className={`text-xs px-3 py-1 rounded-full border transition-colors ${selectedCampaignId === c.id ? 'bg-black text-white border-black' : 'border-gray-300 hover:border-gray-400'}`}
                     >
                       {c.name}
                     </button>
                   ))}
                 </div>
-                {(() => {
-                  const campaign = campaigns.find(c => c.id === selectedCampaignId)
-                  return campaign?.attachment_name ? (
-                    <p className="text-xs text-gray-500">
-                      📎 {campaign.attachment_name} will be attached to this email
-                    </p>
-                  ) : null
-                })()}
+                {selectedCampaign?.attachment_name && (
+                  <p className="text-xs text-gray-500">
+                    📎 {selectedCampaign.attachment_name} will be attached to this email
+                  </p>
+                )}
               </div>
             )}
-            <div className="flex gap-2 flex-wrap">
-              {(Object.keys(TONES) as (keyof typeof TONES)[]).map(tone => (
-                <Button
-                  key={tone}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setPromptText(TONES[tone](buildContext(currentCompany)))}
-                >
-                  {tone}
-                </Button>
-              ))}
-            </div>
+            {isTemplate ? (
+              <>
+                {selectedCampaign?.subject_template && (
+                  <p className="text-xs text-gray-500">
+                    Subject: {fillTemplate(selectedCampaign.subject_template, currentCompany)}
+                  </p>
+                )}
+                <p className="text-xs text-gray-500">
+                  This is the email that will be sent, with variables already filled in. Edit as needed — no AI is used.
+                </p>
+              </>
+            ) : (
+              <div className="flex gap-2 flex-wrap">
+                {(Object.keys(TONES) as (keyof typeof TONES)[]).map(tone => (
+                  <Button
+                    key={tone}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPromptText(TONES[tone](buildContext(currentCompany)))}
+                  >
+                    {tone}
+                  </Button>
+                ))}
+              </div>
+            )}
             <Textarea
               value={promptText}
               onChange={e => setPromptText(e.target.value)}
@@ -262,9 +349,73 @@ export default function CompanyDetail({ company, initialLogs }: Props) {
             />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowPromptDialog(false)}>Cancel</Button>
-              <Button onClick={handleGenerate}>Generate</Button>
+              <Button onClick={handleGenerate}>{isTemplate ? 'Create Draft' : 'Generate'}</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editingCompany} onOpenChange={setEditingCompany}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Company</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveCompany} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Company Name *</Label>
+              <Input
+                value={companyForm.name}
+                onChange={e => setCompanyForm(p => ({ ...p, name: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Contact Email *</Label>
+              <Input
+                type="email"
+                value={companyForm.contact_email}
+                onChange={e => setCompanyForm(p => ({ ...p, contact_email: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Contact Name</Label>
+              <Input
+                value={companyForm.contact_name}
+                onChange={e => setCompanyForm(p => ({ ...p, contact_name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Website</Label>
+              <Input
+                value={companyForm.website}
+                onChange={e => setCompanyForm(p => ({ ...p, website: e.target.value }))}
+                placeholder="https://..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Industry</Label>
+              <Input
+                value={companyForm.industry}
+                onChange={e => setCompanyForm(p => ({ ...p, industry: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                value={companyForm.notes}
+                onChange={e => setCompanyForm(p => ({ ...p, notes: e.target.value }))}
+                className="min-h-[80px] max-h-[40vh] overflow-y-auto"
+              />
+            </div>
+            {companyError && <p className="text-sm text-red-500">{companyError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditingCompany(false)}>Cancel</Button>
+              <Button type="submit" disabled={savingCompany}>
+                {savingCompany ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 

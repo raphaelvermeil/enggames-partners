@@ -1,4 +1,5 @@
 export type CompanyStatus = 'pending' | 'drafted' | 'sent' | 'replied' | 'rejected'
+export type CampaignType = 'prompt' | 'template'
 export type EmailLogStatus = 'draft' | 'sent' | 'failed' | 'bounced' | 'complained'
 
 export interface Company {
@@ -18,7 +19,10 @@ export interface Company {
 export interface Campaign {
   id: string
   name: string
+  type: CampaignType
+  // For type='prompt' this is the AI prompt; for type='template' the literal email body with [variables].
   prompt_template: string
+  subject_template: string | null
   attachment_url: string | null
   attachment_name: string | null
   created_at: string
@@ -30,6 +34,7 @@ export interface EmailLog {
   company_id: string
   campaign_id: string | null
   generated_body: string
+  subject: string | null
   status: EmailLogStatus
   resend_id: string | null
   sent_at: string | null
