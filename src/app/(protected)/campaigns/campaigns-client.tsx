@@ -18,22 +18,47 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
   const [campaigns, setCampaigns] = useState(initialCampaigns)
   const [addOpen, setAddOpen] = useState(false)
   const [form, setForm] = useState({ name: '', prompt_template: '' })
+  const [file, setFile] = useState<File | null>(null)
   const [adding, setAdding] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setAdding(true)
+    setError(null)
     const { data: { user } } = await supabase.auth.getUser()
-    const { data, error } = await supabase.from('campaigns').insert({
+
+    let attachment_url: string | null = null
+    let attachment_name: string | null = null
+    if (file) {
+      const path = `${user!.id}/${crypto.randomUUID()}.pdf`
+      const { error: uploadError } = await supabase.storage
+        .from('campaign-attachments')
+        .upload(path, file, { contentType: 'application/pdf' })
+      if (uploadError) {
+        setError(`Attachment upload failed: ${uploadError.message}`)
+        setAdding(false)
+        return
+      }
+      attachment_url = supabase.storage.from('campaign-attachments').getPublicUrl(path).data.publicUrl
+      attachment_name = file.name
+    }
+
+    const { data, error: insertError } = await supabase.from('campaigns').insert({
       name: form.name,
       prompt_template: form.prompt_template,
+      attachment_url,
+      attachment_name,
       user_id: user!.id,
     }).select().single()
-    if (!error && data) {
+    if (!insertError && data) {
       setCampaigns(prev => [data as Campaign, ...prev])
       setForm({ name: '', prompt_template: '' })
+      setFile(null)
       setAddOpen(false)
+    } else if (insertError) {
+      setError(insertError.message)
     }
     setAdding(false)
   }
@@ -81,6 +106,18 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
                   required
                 />
               </div>
+              <div className="space-y-2">
+                <Label>PDF Attachment</Label>
+                <p className="text-xs text-gray-500">
+                  Optional. This PDF will be attached to every email generated from this campaign.
+                </p>
+                <Input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={e => setFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              {error && <p className="text-sm text-red-500">{error}</p>}
               <Button type="submit" className="w-full" disabled={adding}>
                 {adding ? 'Creating...' : 'Create Campaign'}
               </Button>
@@ -112,6 +149,13 @@ export default function CampaignsClient({ initialCampaigns }: Props) {
                 <p className="text-xs text-gray-400">
                   Created {new Date(campaign.created_at).toLocaleDateString()}
                 </p>
+                {campaign.attachment_name && (
+                  <p className="text-xs text-gray-500">
+                    📎 <a href={campaign.attachment_url!} target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">
+                      {campaign.attachment_name}
+                    </a>
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
                 <pre className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed font-mono bg-gray-50 rounded p-3">

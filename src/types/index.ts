@@ -19,6 +19,8 @@ export interface Campaign {
   id: string
   name: string
   prompt_template: string
+  attachment_url: string | null
+  attachment_name: string | null
   created_at: string
   user_id: string
 }

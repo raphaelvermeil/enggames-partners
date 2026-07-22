@@ -11,10 +11,15 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: log } = await supabase.from('email_logs').select('*, companies(*)').eq('id', logId).single()
+  const { data: log } = await supabase
+    .from('email_logs')
+    .select('*, companies(*), campaigns(attachment_url, attachment_name)')
+    .eq('id', logId)
+    .single()
   if (!log) return NextResponse.json({ error: 'Log not found' }, { status: 404 })
 
   const company = log.companies as { name: string; contact_email: string; contact_name: string | null }
+  const campaign = log.campaigns as { attachment_url: string | null; attachment_name: string | null } | null
 
   try {
     const htmlBody = log.generated_body
@@ -22,12 +27,17 @@ export async function POST(req: NextRequest) {
       .map((line: string) => line.trim() === '' ? '<br/>' : `<p style="margin:0 0 12px 0">${line}</p>`)
       .join('')
 
+    const attachments = campaign?.attachment_url
+      ? [{ path: campaign.attachment_url, filename: campaign.attachment_name ?? 'attachment.pdf' }]
+      : undefined
+
     const { data: sent } = await resend.emails.send({
       from: process.env.EMAIL_FROM!,
       to: company.contact_email,
       subject: `Sponsorship Opportunity — EngGames Engineering Competition`,
       text: log.generated_body,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#111">${htmlBody}</div>`,
+      attachments,
     })
 
     const now = new Date().toISOString()

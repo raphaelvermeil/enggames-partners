@@ -29,6 +29,8 @@ create table campaigns (
   id uuid default uuid_generate_v4() primary key,
   name text not null,
   prompt_template text not null,
+  attachment_url text,
+  attachment_name text,
   created_at timestamptz default now(),
   user_id uuid references auth.users not null
 );
